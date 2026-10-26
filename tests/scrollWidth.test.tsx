@@ -17,7 +17,7 @@ describe('List.scrollWidth', () => {
   let mockMouseEvent;
   let pageX: number;
 
-  const holderHeight = 100;
+  let holderHeight = 100;
   let holderWidth = 100;
 
   beforeAll(() => {
@@ -65,6 +65,7 @@ describe('List.scrollWidth', () => {
   });
 
   beforeEach(() => {
+    holderHeight = 100;
     holderWidth = 100;
     jest.useFakeTimers();
   });
@@ -103,6 +104,84 @@ describe('List.scrollWidth', () => {
     });
 
     expect(container.querySelector('.rc-virtual-list-scrollbar-horizontal')).toBeTruthy();
+    expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toBeTruthy();
+    expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
+      gridTemplateColumns: 'minmax(0, 1fr) 8px',
+      gridTemplateRows: 'minmax(0, 1fr) 8px',
+    });
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '92px' });
+    expect(container.querySelector('.rc-virtual-list-scrollbar-slot-horizontal')).toHaveStyle({
+      gridRow: '2',
+    });
+  });
+
+  it('reserves only the horizontal scrollbar gutter when vertical content fits', async () => {
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(2),
+      scrollWidth: 1000,
+    });
+
+    expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toBeNull();
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '92px' });
+    expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
+      gridTemplateRows: 'minmax(0, 1fr) 8px',
+    });
+  });
+
+  it('matches reserved gutters to custom scrollbar dimensions', async () => {
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(100),
+      scrollWidth: 1000,
+      styles: {
+        verticalScrollBar: { width: 12 },
+        horizontalScrollBar: { height: 6 },
+      },
+    });
+
+    expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
+      gridTemplateColumns: 'minmax(0, 1fr) 12px',
+      gridTemplateRows: 'minmax(0, 1fr) 6px',
+    });
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '94px' });
+  });
+
+  it('adds the vertical scrollbar when the horizontal gutter reduces the viewport', async () => {
+    holderHeight = 92;
+
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(5),
+      scrollWidth: 1000,
+    });
+
+    expect(container.querySelector('.rc-virtual-list-scrollbar-horizontal')).toBeTruthy();
+    expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toBeTruthy();
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '92px' });
+  });
+
+  it('reserves the vertical gutter on the left in rtl', async () => {
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(100),
+      scrollWidth: 1000,
+      direction: 'rtl',
+    });
+
+    expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
+      gridTemplateColumns: '8px minmax(0, 1fr)',
+    });
+    expect(container.querySelector('.rc-virtual-list-scrollbar-slot-vertical')).toHaveStyle({
+      gridColumn: '1',
+    });
+    expect(container.querySelector('.rc-virtual-list-scrollbar-slot-horizontal')).toHaveStyle({
+      gridColumn: '2',
+    });
   });
 
   describe('trigger offset', () => {

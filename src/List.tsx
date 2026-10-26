@@ -20,10 +20,41 @@ import type { ScrollOffset, ScrollOffsetInfo, ScrollPos, ScrollTarget } from './
 import useScrollTo from './hooks/useScrollTo';
 import type { ExtraRenderInfo, GetKey, RenderFunc, SharedConfig } from './interface';
 import type { ScrollBarDirectionType, ScrollBarRef } from './ScrollBar';
-import ScrollBar from './ScrollBar';
+import ScrollBar, { SCROLLBAR_SIZE } from './ScrollBar';
 import { getSpinSize } from './utils/scrollbarUtil';
 
 const EMPTY_DATA = [];
+
+function getScrollbarSize(size: number | string | undefined) {
+  if (typeof size === 'number') {
+    return Math.max(size, 0);
+  }
+
+  if (typeof size === 'string' && size.trim()) {
+    const normalizedSize = size.trim();
+    if (
+      !/^(auto|initial|inherit|unset|revert|fit-content|max-content|min-content)$/i.test(
+        normalizedSize,
+      )
+    ) {
+      return normalizedSize;
+    }
+  }
+
+  return SCROLLBAR_SIZE;
+}
+
+function getReducedSize(size: number, gutter: number | string) {
+  if (typeof gutter === 'number') {
+    return Math.max(size - gutter, 0);
+  }
+
+  return `calc(${size}px - ${gutter})`;
+}
+
+function toCssSize(size: number | string) {
+  return typeof size === 'number' ? `${size}px` : size;
+}
 
 const ScrollStyle: React.CSSProperties = {
   overflowY: 'auto',
@@ -153,6 +184,8 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
   const componentRef = useRef<HTMLDivElement>(null);
   const fillerInnerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = React.useState({ width: 0, height });
+  const viewportHeight = size.height || height;
 
   // =============================== Item Key ===============================
 
@@ -242,7 +275,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
       }
 
       // Check item bottom in the range. We will render additional one item for motion usage
-      if (currentItemBottom > offsetTop + height && endIndex === undefined) {
+      if (currentItemBottom > offsetTop + viewportHeight && endIndex === undefined) {
         endIndex = i;
       }
 
@@ -254,7 +287,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
       startIndex = 0;
       startOffset = 0;
 
-      endIndex = Math.ceil(height / itemHeight);
+      endIndex = Math.ceil(viewportHeight / itemHeight);
     }
     if (endIndex === undefined) {
       endIndex = mergedData.length - 1;
@@ -269,7 +302,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
       end: endIndex,
       offset: startOffset,
     };
-  }, [inVirtual, useVirtual, offsetTop, mergedData, heightUpdatedMark, height]);
+  }, [inVirtual, useVirtual, offsetTop, mergedData, heightUpdatedMark, viewportHeight]);
 
   rangeRef.current.start = start;
   rangeRef.current.end = end;
@@ -301,8 +334,6 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
   }, [scrollHeight]);
 
   // ================================= Size =================================
-  const [size, setSize] = React.useState({ width: 0, height });
-
   const onHolderResize: ResizeObserverProps['onResize'] = (sizeInfo) => {
     setSize({
       width: sizeInfo.offsetWidth,
@@ -324,7 +355,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
   );
 
   // =============================== In Range ===============================
-  const maxScrollHeight = scrollHeight - height;
+  const maxScrollHeight = scrollHeight - viewportHeight;
   const maxScrollHeightRef = useRef(maxScrollHeight);
   maxScrollHeightRef.current = maxScrollHeight;
 
@@ -475,7 +506,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
   // `mousemove` path above is not fired during a native drag, and the native
   // drag-to-edge autoscroll is disabled by `overflow: hidden`, so drive it from
   // the drag events here instead.
-  useDragEdgeScroll(inVirtual, componentRef, height, itemHeight, (offset) => {
+  useDragEdgeScroll(inVirtual, componentRef, viewportHeight, itemHeight, (offset) => {
     syncScrollTop((top) => top + offset);
   });
 
@@ -587,9 +618,40 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
     sharedConfig,
   );
 
+  const hasVerticalScrollBar = !!inVirtual && scrollHeight > viewportHeight;
+  const hasHorizontalScrollBar = !!inVirtual && !!scrollWidth && scrollWidth > size.width;
+  const hasScrollBar = hasVerticalScrollBar || hasHorizontalScrollBar;
+  const verticalScrollbarSize = getScrollbarSize(styles?.verticalScrollBar?.width);
+  const horizontalScrollbarSize = getScrollbarSize(styles?.horizontalScrollBar?.height);
+  const contentColumn = hasVerticalScrollBar && isRTL ? 2 : 1;
+
+  const rootGridStyle: React.CSSProperties = hasScrollBar
+    ? {
+        display: 'grid',
+        gridTemplateColumns: hasVerticalScrollBar
+          ? isRTL
+            ? `${toCssSize(verticalScrollbarSize)} minmax(0, 1fr)`
+            : `minmax(0, 1fr) ${toCssSize(verticalScrollbarSize)}`
+          : 'minmax(0, 1fr)',
+        gridTemplateRows: hasHorizontalScrollBar
+          ? `minmax(0, 1fr) ${toCssSize(horizontalScrollbarSize)}`
+          : undefined,
+      }
+    : {};
+
   let componentStyle: React.CSSProperties = null;
   if (height) {
-    componentStyle = { [fullHeight ? 'height' : 'maxHeight']: height, ...ScrollStyle };
+    const holderHeight = hasHorizontalScrollBar
+      ? getReducedSize(height, horizontalScrollbarSize)
+      : height;
+    componentStyle = { [fullHeight ? 'height' : 'maxHeight']: holderHeight, ...ScrollStyle };
+
+    if (hasScrollBar) {
+      componentStyle.minWidth = 0;
+      componentStyle.minHeight = 0;
+      componentStyle.gridColumn = contentColumn;
+      componentStyle.gridRow = 1;
+    }
 
     if (useVirtual) {
       componentStyle.overflowY = 'hidden';
@@ -614,6 +676,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
       ref={containerRef}
       style={{
         ...style,
+        ...rootGridStyle,
         position: 'relative',
       }}
       className={mergedClassName}
@@ -645,41 +708,59 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
         </Component>
       </ResizeObserver>
 
-      {inVirtual && scrollHeight > height && (
-        <ScrollBar
-          ref={verticalScrollBarRef}
-          prefixCls={prefixCls}
-          scrollOffset={offsetTop}
-          scrollRange={scrollHeight}
-          rtl={isRTL}
-          onScroll={onScrollBar}
-          onStartMove={onScrollbarStartMove}
-          onStopMove={onScrollbarStopMove}
-          spinSize={verticalScrollBarSpinSize}
-          containerSize={size.height}
-          style={styles?.verticalScrollBar}
-          thumbStyle={styles?.verticalScrollBarThumb}
-          showScrollBar={showScrollBar}
-        />
+      {hasVerticalScrollBar && (
+        <div
+          className={`${prefixCls}-scrollbar-slot ${prefixCls}-scrollbar-slot-vertical`}
+          style={{
+            position: 'relative',
+            gridColumn: isRTL ? 1 : 2,
+            gridRow: 1,
+          }}
+        >
+          <ScrollBar
+            ref={verticalScrollBarRef}
+            prefixCls={prefixCls}
+            scrollOffset={offsetTop}
+            scrollRange={scrollHeight}
+            rtl={isRTL}
+            onScroll={onScrollBar}
+            onStartMove={onScrollbarStartMove}
+            onStopMove={onScrollbarStopMove}
+            spinSize={verticalScrollBarSpinSize}
+            containerSize={size.height}
+            style={styles?.verticalScrollBar}
+            thumbStyle={styles?.verticalScrollBarThumb}
+            showScrollBar={showScrollBar}
+          />
+        </div>
       )}
 
-      {inVirtual && scrollWidth > size.width && (
-        <ScrollBar
-          ref={horizontalScrollBarRef}
-          prefixCls={prefixCls}
-          scrollOffset={offsetLeft}
-          scrollRange={scrollWidth}
-          rtl={isRTL}
-          onScroll={onScrollBar}
-          onStartMove={onScrollbarStartMove}
-          onStopMove={onScrollbarStopMove}
-          spinSize={horizontalScrollBarSpinSize}
-          containerSize={size.width}
-          horizontal
-          style={styles?.horizontalScrollBar}
-          thumbStyle={styles?.horizontalScrollBarThumb}
-          showScrollBar={showScrollBar}
-        />
+      {hasHorizontalScrollBar && (
+        <div
+          className={`${prefixCls}-scrollbar-slot ${prefixCls}-scrollbar-slot-horizontal`}
+          style={{
+            position: 'relative',
+            gridColumn: contentColumn,
+            gridRow: 2,
+          }}
+        >
+          <ScrollBar
+            ref={horizontalScrollBarRef}
+            prefixCls={prefixCls}
+            scrollOffset={offsetLeft}
+            scrollRange={scrollWidth}
+            rtl={isRTL}
+            onScroll={onScrollBar}
+            onStartMove={onScrollbarStartMove}
+            onStopMove={onScrollbarStopMove}
+            spinSize={horizontalScrollBarSpinSize}
+            containerSize={size.width}
+            horizontal
+            style={styles?.horizontalScrollBar}
+            thumbStyle={styles?.horizontalScrollBarThumb}
+            showScrollBar={showScrollBar}
+          />
+        </div>
       )}
     </div>
   );

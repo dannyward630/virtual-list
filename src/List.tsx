@@ -1,6 +1,6 @@
 import { clsx } from 'clsx';
 import type { ResizeObserverProps } from '@rc-component/resize-observer';
-import ResizeObserver from '@rc-component/resize-observer';
+import ResizeObserver, { useResizeObserver } from '@rc-component/resize-observer';
 import { useEvent, useLayoutEffect } from '@rc-component/util';
 import * as React from 'react';
 import { useRef, useState } from 'react';
@@ -21,7 +21,7 @@ import useScrollTo from './hooks/useScrollTo';
 import type { ExtraRenderInfo, GetKey, RenderFunc, SharedConfig } from './interface';
 import type { ScrollBarDirectionType, ScrollBarRef } from './ScrollBar';
 import ScrollBar, { SCROLLBAR_SIZE } from './ScrollBar';
-import { getSpinSize } from './utils/scrollbarUtil';
+import { getScrollbarVisibility, getSpinSize } from './utils/scrollbarUtil';
 
 const EMPTY_DATA = [];
 
@@ -32,6 +32,10 @@ function getScrollbarSize(size: number | string | undefined) {
 
   if (typeof size === 'string' && size.trim()) {
     const normalizedSize = size.trim();
+    if (normalizedSize === '0') {
+      return 0;
+    }
+
     if (
       !/^(auto|initial|inherit|unset|revert|fit-content|max-content|min-content)$/i.test(
         normalizedSize,
@@ -185,6 +189,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
   const fillerInnerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = React.useState({ width: 0, height });
+  const [containerWidth, setContainerWidth] = React.useState<number>();
   const viewportHeight = size.height || height;
 
   // =============================== Item Key ===============================
@@ -340,6 +345,14 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
       height: sizeInfo.offsetHeight,
     });
   };
+
+  const onContainerResize: ResizeObserverProps['onResize'] = (_sizeInfo, element) => {
+    const styles = window.getComputedStyle(element);
+    const padding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+    setContainerWidth(Math.max(element.clientWidth - (Number.isFinite(padding) ? padding : 0), 0));
+  };
+
+  useResizeObserver(true, () => containerRef.current!, undefined, onContainerResize);
 
   // Hack on scrollbar to enable flash call
   const verticalScrollBarRef = useRef<ScrollBarRef>(null);
@@ -618,22 +631,27 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
     sharedConfig,
   );
 
-  const hasVerticalScrollBar = !!inVirtual && scrollHeight > viewportHeight;
-  const hasHorizontalScrollBar = !!inVirtual && !!scrollWidth && scrollWidth > size.width;
-  const hasScrollBar = hasVerticalScrollBar || hasHorizontalScrollBar;
   const verticalScrollbarSize = getScrollbarSize(styles?.verticalScrollBar?.width);
   const horizontalScrollbarSize = getScrollbarSize(styles?.horizontalScrollBar?.height);
-  const contentColumn = hasVerticalScrollBar && isRTL ? 2 : 1;
+  const { hasVerticalScrollBar, hasHorizontalScrollBar } = getScrollbarVisibility({
+    scrollWidth,
+    scrollHeight,
+    containerWidth: containerWidth ?? size.width,
+    containerHeight: height ?? viewportHeight ?? 0,
+    viewportWidth: size.width || containerWidth || 0,
+    viewportHeight: viewportHeight || height || 0,
+  });
+  const shouldShowVerticalScrollBar = !!inVirtual && hasVerticalScrollBar;
+  const shouldShowHorizontalScrollBar = !!inVirtual && hasHorizontalScrollBar;
+  const hasScrollBar = shouldShowVerticalScrollBar || shouldShowHorizontalScrollBar;
 
   const rootGridStyle: React.CSSProperties = hasScrollBar
     ? {
         display: 'grid',
-        gridTemplateColumns: hasVerticalScrollBar
-          ? isRTL
-            ? `${toCssSize(verticalScrollbarSize)} minmax(0, 1fr)`
-            : `minmax(0, 1fr) ${toCssSize(verticalScrollbarSize)}`
+        gridTemplateColumns: shouldShowVerticalScrollBar
+          ? `minmax(0, 1fr) ${toCssSize(verticalScrollbarSize)}`
           : 'minmax(0, 1fr)',
-        gridTemplateRows: hasHorizontalScrollBar
+        gridTemplateRows: shouldShowHorizontalScrollBar
           ? `minmax(0, 1fr) ${toCssSize(horizontalScrollbarSize)}`
           : undefined,
       }
@@ -641,7 +659,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
 
   let componentStyle: React.CSSProperties = null;
   if (height) {
-    const holderHeight = hasHorizontalScrollBar
+    const holderHeight = shouldShowHorizontalScrollBar
       ? getReducedSize(height, horizontalScrollbarSize)
       : height;
     componentStyle = { [fullHeight ? 'height' : 'maxHeight']: holderHeight, ...ScrollStyle };
@@ -649,7 +667,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
     if (hasScrollBar) {
       componentStyle.minWidth = 0;
       componentStyle.minHeight = 0;
-      componentStyle.gridColumn = contentColumn;
+      componentStyle.gridColumn = 1;
       componentStyle.gridRow = 1;
     }
 
@@ -708,12 +726,12 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
         </Component>
       </ResizeObserver>
 
-      {hasVerticalScrollBar && (
+      {shouldShowVerticalScrollBar && (
         <div
           className={`${prefixCls}-scrollbar-slot ${prefixCls}-scrollbar-slot-vertical`}
           style={{
             position: 'relative',
-            gridColumn: isRTL ? 1 : 2,
+            gridColumn: 2,
             gridRow: 1,
           }}
         >
@@ -735,12 +753,12 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
         </div>
       )}
 
-      {hasHorizontalScrollBar && (
+      {shouldShowHorizontalScrollBar && (
         <div
           className={`${prefixCls}-scrollbar-slot ${prefixCls}-scrollbar-slot-horizontal`}
           style={{
             position: 'relative',
-            gridColumn: contentColumn,
+            gridColumn: 1,
             gridRow: 2,
           }}
         >

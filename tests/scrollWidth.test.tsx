@@ -5,6 +5,7 @@ import { spyElementPrototypes } from '@rc-component/util/lib/test/domHook';
 import React from 'react';
 import type { ListRef } from '../src';
 import List, { type ListProps } from '../src';
+import { getScrollbarVisibility } from '../src/utils/scrollbarUtil';
 
 const ITEM_HEIGHT = 20;
 
@@ -19,6 +20,8 @@ describe('List.scrollWidth', () => {
 
   let holderHeight = 100;
   let holderWidth = 100;
+  let containerHeight = 100;
+  let containerWidth = 100;
 
   beforeAll(() => {
     mockElement = spyElementPrototypes(HTMLElement, {
@@ -27,11 +30,17 @@ describe('List.scrollWidth', () => {
           if (this.classList.contains('rc-virtual-list-holder')) {
             return holderHeight;
           }
+          if (this.classList.contains('rc-virtual-list')) {
+            return containerHeight;
+          }
           return ITEM_HEIGHT;
         },
       },
       offsetWidth: {
         get() {
+          if (this.classList.contains('rc-virtual-list')) {
+            return containerWidth;
+          }
           return holderWidth;
         },
       },
@@ -40,14 +49,21 @@ describe('List.scrollWidth', () => {
           return holderHeight;
         },
       },
+      clientWidth: {
+        get() {
+          return this.classList.contains('rc-virtual-list') ? containerWidth : holderWidth;
+        },
+      },
       getBoundingClientRect() {
+        const width = this.classList.contains('rc-virtual-list') ? containerWidth : holderWidth;
+        const height = this.classList.contains('rc-virtual-list') ? containerHeight : holderHeight;
         return {
           top: 0,
-          bottom: holderHeight,
+          bottom: height,
           left: 0,
-          right: holderWidth,
-          width: holderWidth,
-          height: holderHeight,
+          right: width,
+          width,
+          height,
         };
       },
     });
@@ -67,6 +83,8 @@ describe('List.scrollWidth', () => {
   beforeEach(() => {
     holderHeight = 100;
     holderWidth = 100;
+    containerHeight = 100;
+    containerWidth = 100;
     jest.useFakeTimers();
   });
 
@@ -84,6 +102,9 @@ describe('List.scrollWidth', () => {
 
     await act(async () => {
       onLibResize([
+        {
+          target: ret.container.querySelector('.rc-virtual-list')!,
+        } as ResizeObserverEntry,
         {
           target: ret.container.querySelector('.rc-virtual-list-holder')!,
         } as ResizeObserverEntry,
@@ -164,6 +185,54 @@ describe('List.scrollWidth', () => {
     expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '92px' });
   });
 
+  it('keeps scrollbar decisions stable when the holder was measured after gutters', async () => {
+    containerWidth = 200;
+    containerHeight = 100;
+    holderWidth = 192;
+    holderHeight = 92;
+
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(5),
+      scrollWidth: 200,
+      style: { width: 200 },
+    });
+
+    expect(container.querySelector('.rc-virtual-list-scrollbar-horizontal')).toBeNull();
+    expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toBeNull();
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '100px' });
+  });
+
+  it('normalizes string zero scrollbar dimensions', async () => {
+    const horizontal = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(100),
+      scrollWidth: 1000,
+      styles: { horizontalScrollBar: { height: '0' } },
+    });
+
+    expect(horizontal.container.querySelector('.rc-virtual-list')).toHaveStyle({
+      gridTemplateRows: 'minmax(0, 1fr) 0px',
+    });
+    expect(horizontal.container.querySelector('.rc-virtual-list-holder')).toHaveStyle({
+      height: '100px',
+    });
+    horizontal.unmount();
+
+    const vertical = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(100),
+      styles: { verticalScrollBar: { width: '0' } },
+    });
+
+    expect(vertical.container.querySelector('.rc-virtual-list')).toHaveStyle({
+      gridTemplateColumns: 'minmax(0, 1fr) 0px',
+    });
+  });
+
   it('reserves the vertical gutter on the left in rtl', async () => {
     const { container } = await genList({
       itemHeight: ITEM_HEIGHT,
@@ -174,14 +243,40 @@ describe('List.scrollWidth', () => {
     });
 
     expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
-      gridTemplateColumns: '8px minmax(0, 1fr)',
+      gridTemplateColumns: 'minmax(0, 1fr) 8px',
     });
+    expect(container.querySelector('.rc-virtual-list')).toHaveAttribute('dir', 'rtl');
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ gridColumn: '1' });
     expect(container.querySelector('.rc-virtual-list-scrollbar-slot-vertical')).toHaveStyle({
-      gridColumn: '1',
-    });
-    expect(container.querySelector('.rc-virtual-list-scrollbar-slot-horizontal')).toHaveStyle({
       gridColumn: '2',
     });
+    expect(container.querySelector('.rc-virtual-list-scrollbar-slot-horizontal')).toHaveStyle({
+      gridColumn: '1',
+    });
+  });
+
+  it('resolves mutually dependent gutters from the outer viewport', () => {
+    expect(
+      getScrollbarVisibility({
+        containerHeight: 100,
+        containerWidth: 200,
+        scrollHeight: 100,
+        scrollWidth: 200,
+        viewportHeight: 92,
+        viewportWidth: 192,
+      }),
+    ).toEqual({ hasHorizontalScrollBar: false, hasVerticalScrollBar: false });
+
+    expect(
+      getScrollbarVisibility({
+        containerHeight: 100,
+        containerWidth: 200,
+        scrollHeight: 100,
+        scrollWidth: 201,
+        viewportHeight: 92,
+        viewportWidth: 192,
+      }),
+    ).toEqual({ hasHorizontalScrollBar: true, hasVerticalScrollBar: true });
   });
 
   describe('trigger offset', () => {

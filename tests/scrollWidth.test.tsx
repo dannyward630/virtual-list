@@ -129,8 +129,9 @@ describe('List.scrollWidth', () => {
     expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
       gridTemplateColumns: 'minmax(0, 1fr) 8px',
       gridTemplateRows: 'minmax(0, 1fr) 8px',
+      height: '100px',
     });
-    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '92px' });
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '100%' });
     expect(container.querySelector('.rc-virtual-list-scrollbar-slot-horizontal')).toHaveStyle({
       gridRow: '2',
     });
@@ -145,10 +146,25 @@ describe('List.scrollWidth', () => {
     });
 
     expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toBeNull();
-    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '92px' });
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '100%' });
     expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
       gridTemplateRows: 'minmax(0, 1fr) 8px',
+      height: '100px',
     });
+  });
+
+  it('constrains the grid without changing fullHeight false into fixed height', async () => {
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      fullHeight: false,
+      data: genData(100),
+      scrollWidth: 1000,
+    });
+
+    expect(container.querySelector('.rc-virtual-list')).toHaveStyle({ maxHeight: '100px' });
+    expect(container.querySelector('.rc-virtual-list')).not.toHaveStyle({ height: '100px' });
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ maxHeight: '100%' });
   });
 
   it('does not reserve scrollbar gutters when scrollbars are disabled', async () => {
@@ -179,8 +195,9 @@ describe('List.scrollWidth', () => {
     expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
       gridTemplateColumns: 'minmax(0, 1fr) 12px',
       gridTemplateRows: 'minmax(0, 1fr) 6px',
+      height: '100px',
     });
-    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '94px' });
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '100%' });
   });
 
   it('fills percentage-sized scrollbar gutters without applying the percentage twice', async () => {
@@ -262,7 +279,7 @@ describe('List.scrollWidth', () => {
 
     expect(container.querySelector('.rc-virtual-list-scrollbar-horizontal')).toBeTruthy();
     expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toBeTruthy();
-    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '92px' });
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '100%' });
   });
 
   it('keeps scrollbar decisions stable when the holder was measured after gutters', async () => {
@@ -295,9 +312,10 @@ describe('List.scrollWidth', () => {
 
     expect(horizontal.container.querySelector('.rc-virtual-list')).toHaveStyle({
       gridTemplateRows: 'minmax(0, 1fr) 0px',
+      height: '100px',
     });
     expect(horizontal.container.querySelector('.rc-virtual-list-holder')).toHaveStyle({
-      height: '100px',
+      height: '100%',
     });
     horizontal.unmount();
 

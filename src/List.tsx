@@ -668,6 +668,9 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
         gridTemplateRows: shouldShowHorizontalScrollBar
           ? `minmax(0, 1fr) ${toCssSize(horizontalScrollbarSize)}`
           : undefined,
+        ...(shouldShowHorizontalScrollBar && height
+          ? { [fullHeight ? 'height' : 'maxHeight']: height }
+          : {}),
       }
     : {};
 

@@ -339,17 +339,26 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
   }, [scrollHeight]);
 
   // ================================= Size =================================
+  const updateContainerWidth = (element: HTMLElement) => {
+    const computedStyle = window.getComputedStyle(element);
+    const padding = parseFloat(computedStyle.paddingLeft) + parseFloat(computedStyle.paddingRight);
+    const nextWidth = Math.max(element.clientWidth - (Number.isFinite(padding) ? padding : 0), 0);
+    setContainerWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
+  };
+
   const onHolderResize: ResizeObserverProps['onResize'] = (sizeInfo) => {
     setSize({
       width: sizeInfo.offsetWidth,
       height: sizeInfo.offsetHeight,
     });
+
+    if (containerRef.current) {
+      updateContainerWidth(containerRef.current);
+    }
   };
 
   const onContainerResize: ResizeObserverProps['onResize'] = (_sizeInfo, element) => {
-    const styles = window.getComputedStyle(element);
-    const padding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
-    setContainerWidth(Math.max(element.clientWidth - (Number.isFinite(padding) ? padding : 0), 0));
+    updateContainerWidth(element);
   };
 
   useResizeObserver(true, () => containerRef.current!, undefined, onContainerResize);
@@ -633,6 +642,17 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
 
   const verticalScrollbarSize = getScrollbarSize(styles?.verticalScrollBar?.width);
   const horizontalScrollbarSize = getScrollbarSize(styles?.horizontalScrollBar?.height);
+  const verticalScrollbarStyle = styles?.verticalScrollBar;
+  const horizontalScrollbarStyle = styles?.horizontalScrollBar;
+  const verticalScrollbarStyleInSlot =
+    typeof verticalScrollbarStyle?.width === 'string' && verticalScrollbarStyle.width.includes('%')
+      ? { ...verticalScrollbarStyle, width: '100%' }
+      : verticalScrollbarStyle;
+  const horizontalScrollbarStyleInSlot =
+    typeof horizontalScrollbarStyle?.height === 'string' &&
+    horizontalScrollbarStyle.height.includes('%')
+      ? { ...horizontalScrollbarStyle, height: '100%' }
+      : horizontalScrollbarStyle;
   const { hasVerticalScrollBar, hasHorizontalScrollBar } = getScrollbarVisibility({
     scrollWidth,
     scrollHeight,
@@ -641,8 +661,10 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
     viewportWidth: size.width || containerWidth || 0,
     viewportHeight: viewportHeight || height || 0,
   });
-  const shouldShowVerticalScrollBar = !!inVirtual && hasVerticalScrollBar;
-  const shouldShowHorizontalScrollBar = !!inVirtual && hasHorizontalScrollBar;
+  const shouldShowVerticalScrollBar =
+    showScrollBar !== false && !!inVirtual && hasVerticalScrollBar;
+  const shouldShowHorizontalScrollBar =
+    showScrollBar !== false && !!inVirtual && hasHorizontalScrollBar;
   const hasScrollBar = shouldShowVerticalScrollBar || shouldShowHorizontalScrollBar;
 
   const rootGridStyle: React.CSSProperties = hasScrollBar
@@ -746,7 +768,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
             onStopMove={onScrollbarStopMove}
             spinSize={verticalScrollBarSpinSize}
             containerSize={size.height}
-            style={styles?.verticalScrollBar}
+            style={verticalScrollbarStyleInSlot}
             thumbStyle={styles?.verticalScrollBarThumb}
             showScrollBar={showScrollBar}
           />
@@ -774,7 +796,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
             spinSize={horizontalScrollBarSpinSize}
             containerSize={size.width}
             horizontal
-            style={styles?.horizontalScrollBar}
+            style={horizontalScrollbarStyleInSlot}
             thumbStyle={styles?.horizontalScrollBarThumb}
             showScrollBar={showScrollBar}
           />

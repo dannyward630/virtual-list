@@ -151,6 +151,19 @@ describe('List.scrollWidth', () => {
     });
   });
 
+  it('does not reserve scrollbar gutters when scrollbars are disabled', async () => {
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(100),
+      scrollWidth: 1000,
+      showScrollBar: false,
+    });
+
+    expect(container.querySelector('.rc-virtual-list-scrollbar-slot')).toBeNull();
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '100px' });
+  });
+
   it('matches reserved gutters to custom scrollbar dimensions', async () => {
     const { container } = await genList({
       itemHeight: ITEM_HEIGHT,
@@ -168,6 +181,73 @@ describe('List.scrollWidth', () => {
       gridTemplateRows: 'minmax(0, 1fr) 6px',
     });
     expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ height: '94px' });
+  });
+
+  it('fills percentage-sized scrollbar gutters without applying the percentage twice', async () => {
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(100),
+      scrollWidth: 1000,
+      styles: {
+        verticalScrollBar: { width: '50%' },
+        horizontalScrollBar: { height: '50%' },
+      },
+    });
+
+    expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
+      gridTemplateColumns: 'minmax(0, 1fr) 50%',
+      gridTemplateRows: 'minmax(0, 1fr) 50%',
+    });
+    expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toHaveStyle({
+      width: '100%',
+    });
+    expect(container.querySelector('.rc-virtual-list-scrollbar-horizontal')).toHaveStyle({
+      height: '100%',
+    });
+  });
+
+  it('refreshes available container width when only the holder size changes', async () => {
+    containerWidth = 200;
+    holderWidth = 200;
+
+    const props = {
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      data: genData(2),
+      scrollWidth: 190,
+      style: { width: 200 },
+    };
+    const result = await genList(props);
+
+    expect(result.container.querySelector('.rc-virtual-list-scrollbar-horizontal')).toBeNull();
+
+    result.rerender(
+      <List
+        component="ul"
+        itemKey="id"
+        {...props}
+        style={{ width: 200, paddingLeft: 20, paddingRight: 0 }}
+      >
+        {({ id }) => <li>{id}</li>}
+      </List>,
+    );
+    holderWidth = 180;
+
+    await act(async () => {
+      onLibResize([
+        {
+          target: result.container.querySelector('.rc-virtual-list')!,
+        } as ResizeObserverEntry,
+        {
+          target: result.container.querySelector('.rc-virtual-list-holder')!,
+        } as ResizeObserverEntry,
+      ]);
+
+      await Promise.resolve();
+    });
+
+    expect(result.container.querySelector('.rc-virtual-list-scrollbar-horizontal')).toBeTruthy();
   });
 
   it('adds the vertical scrollbar when the horizontal gutter reduces the viewport', async () => {

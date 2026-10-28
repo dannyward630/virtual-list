@@ -48,14 +48,6 @@ function getScrollbarSize(size: number | string | undefined) {
   return SCROLLBAR_SIZE;
 }
 
-function getReducedSize(size: number, gutter: number | string) {
-  if (typeof gutter === 'number') {
-    return Math.max(size - gutter, 0);
-  }
-
-  return `calc(${size}px - ${gutter})`;
-}
-
 function toCssSize(size: number | string) {
   return typeof size === 'number' ? `${size}px` : size;
 }
@@ -681,9 +673,9 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
 
   let componentStyle: React.CSSProperties = null;
   if (height) {
-    const holderHeight = shouldShowHorizontalScrollBar
-      ? getReducedSize(height, horizontalScrollbarSize)
-      : height;
+    // The grid track already excludes the horizontal scrollbar gutter. Size
+    // the holder against that track so percentage gutters use the same basis.
+    const holderHeight = shouldShowHorizontalScrollBar ? '100%' : height;
     componentStyle = { [fullHeight ? 'height' : 'maxHeight']: holderHeight, ...ScrollStyle };
 
     if (hasScrollBar) {

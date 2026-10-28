@@ -659,6 +659,29 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
     showScrollBar !== false && !!inVirtual && hasHorizontalScrollBar;
   const hasScrollBar = shouldShowVerticalScrollBar || shouldShowHorizontalScrollBar;
 
+  const horizontalScrollbarPercentMatch =
+    typeof horizontalScrollbarSize === 'string'
+      ? /^(\d+(?:\.\d+)?|\.\d+)%$/.exec(horizontalScrollbarSize.trim())
+      : null;
+  const horizontalScrollbarPercent = horizontalScrollbarPercentMatch
+    ? Number(horizontalScrollbarPercentMatch[1]) / 100
+    : null;
+  // When the root can shrink under maxHeight, a percentage gutter also shrinks
+  // its content track. Keep enough intrinsic height for the content to fit,
+  // while leaving the height prop as the maximum.
+  const rootMinHeight =
+    !fullHeight &&
+    shouldShowHorizontalScrollBar &&
+    typeof height === 'number' &&
+    typeof scrollHeight === 'number' &&
+    horizontalScrollbarPercent !== null &&
+    horizontalScrollbarPercent > 0 &&
+    horizontalScrollbarPercent < 1 &&
+    style?.height === undefined &&
+    style?.minHeight === undefined
+      ? Math.min(height, scrollHeight / (1 - horizontalScrollbarPercent))
+      : undefined;
+
   const rootGridStyle: React.CSSProperties = hasScrollBar
     ? {
         display: 'grid',
@@ -671,6 +694,7 @@ export function RawList<T>(props: ListProps<T>, ref: React.Ref<ListRef>) {
         ...(shouldShowHorizontalScrollBar && height
           ? { [fullHeight ? 'height' : 'maxHeight']: height }
           : {}),
+        ...(rootMinHeight === undefined ? {} : { minHeight: rootMinHeight }),
       }
     : {};
 

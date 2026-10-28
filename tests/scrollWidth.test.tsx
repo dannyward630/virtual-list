@@ -167,6 +167,45 @@ describe('List.scrollWidth', () => {
     expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ maxHeight: '100%' });
   });
 
+  it('keeps short content visible with a percentage gutter when fullHeight is false', async () => {
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      fullHeight: false,
+      data: genData(2),
+      scrollWidth: 1000,
+      style: { width: 200 },
+      styles: { horizontalScrollBar: { height: '50%' } },
+    });
+
+    expect(container.querySelector('.rc-virtual-list-scrollbar-horizontal')).toBeTruthy();
+    expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toBeNull();
+    expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
+      maxHeight: '100px',
+      minHeight: '80px',
+    });
+    expect(container.querySelector('.rc-virtual-list')).not.toHaveStyle({ height: '100px' });
+    expect(container.querySelector('.rc-virtual-list-holder')).toHaveStyle({ maxHeight: '100%' });
+  });
+
+  it('caps the percentage gutter minimum at the requested height', async () => {
+    const { container } = await genList({
+      itemHeight: ITEM_HEIGHT,
+      height: 100,
+      fullHeight: false,
+      data: genData(10),
+      scrollWidth: 1000,
+      style: { width: 200 },
+      styles: { horizontalScrollBar: { height: '50%' } },
+    });
+
+    expect(container.querySelector('.rc-virtual-list-scrollbar-vertical')).toBeTruthy();
+    expect(container.querySelector('.rc-virtual-list')).toHaveStyle({
+      maxHeight: '100px',
+      minHeight: '100px',
+    });
+  });
+
   it('does not reserve scrollbar gutters when scrollbars are disabled', async () => {
     const { container } = await genList({
       itemHeight: ITEM_HEIGHT,
